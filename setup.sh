@@ -278,10 +278,10 @@ done
 nginx -s reload
 
 # Setup coturn
-echo >>/etc/turnserver.conf <<EOF
+cat >>/etc/turnserver.conf <<EOF
 listening-ip=10.42.0.1
 EOF
-echo >/etc/default/coturn <<EOF
+cat >/etc/default/coturn <<EOF
 #
 # Uncomment it if you want to have the turnserver running as
 # an automatic system service daemon
