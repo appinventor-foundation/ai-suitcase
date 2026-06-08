@@ -408,6 +408,7 @@ popd
 
 # Setup dnsmasq
 echo "address=/$DOMAIN/10.42.0.1" >> /etc/dnsmasq.conf
+echo "address=/rendezvous.appinventor.mit.edu/10.42.0.1" >> /etc/dnsmasq.conf
 ln -s /etc/dnsmasq.conf /etc/NetworkManager/dnsmasq-shared.d/
 
 # Set up the hotspot. Since this will change the Wifi settings and we may be configuring over Wifi, we save it as the last step.
