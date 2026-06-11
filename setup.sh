@@ -365,6 +365,7 @@ services:
       - CHATBOT_BASE_URL=https://chatbot.$DOMAIN/
       - CHATBOT_SECRET_FILE=/run/secrets/chatbot_secret
       - POSTGRES_PASSWORD_FILE=/run/secrets/db_root_pass
+      - RENDEZVOUS_SERVER=rendezvous.$DOMAIN
   redis:
     image: redis
     restart: always
@@ -374,6 +375,8 @@ services:
   rendezvous:
     image: "ai-suitcase-orchestration-rendezvous:latest"
     restart: always
+    environment:
+      - RENDEZVOUS_SERVER=rendezvous.$DOMAIN
     depends_on:
       - redis
       - logger
