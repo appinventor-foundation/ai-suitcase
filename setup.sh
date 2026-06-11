@@ -78,40 +78,43 @@ apt -y install $PKGS
 certbot --manual certonly -d \*.$DOMAIN </dev/tty
 
 # Build llama.cpp
-git clone https://github.com/ggml-org/llama.cpp
-pushd llama.cpp
-# git checkout b68d75165ad37ba1256cc45a43ec4f51cf813c3e # checkout the exact commit used during initial testing
-if [ -f '/usr/local/cuda/bin/nvcc' ]; then
-    LLAMA_CPP_ARGS="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=121-real -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc"
-else
-    LLAMA_CPP_ARGS="-DGGML_CUDA=OFF"
+if [ ! -d "llama.cpp" ]; then
+    git clone https://github.com/ggml-org/llama.cpp
+    pushd llama.cpp
+    # git checkout b68d75165ad37ba1256cc45a43ec4f51cf813c3e # checkout the exact commit used during initial testing
+    if [ -f '/usr/local/cuda/bin/nvcc' ]; then
+	LLAMA_CPP_ARGS="-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=121-real -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc"
+    else
+	LLAMA_CPP_ARGS="-DGGML_CUDA=OFF"
+    fi
+    cmake -B build -DLLAMA_OPENSSL=ON $LLAMA_CPP_ARGS
+    cmake --build build --config Release -j
+    LLAMA_SERVER="${PWD}/build/bin/llama-server"
+    case $LOAD_MODELS in
+	[Yy]* )
+	    echo "Pulling default models..."
+	    sudo -u www-data build/bin/llama-cli -hf unsloth/medgemma-27b-it-GGUF:UD-Q4_K_XL -st -p "What is 2+2?"
+	    sudo -u www-data build/bin/llama-cli -hf ggml-org/gpt-oss-120b-GGUF --jinja -st -p "What is 2+2?"
+	    break;;
+    esac
+    popd
 fi
-cmake -B build -DLLAMA_OPENSSL=ON $LLAMA_CPP_ARGS
-cmake --build build --config Release -j
-LLAMA_SERVER="${PWD}/build/bin/llama-server"
-case $LOAD_MODELS in
-    [Yy]* )
-	echo "Pulling default models..."
-	sudo -u www-data build/bin/llama-cli -hf unsloth/medgemma-27b-it-GGUF:UD-Q4_K_XL -st -p "What is 2+2?"
-	sudo -u www-data build/bin/llama-cli -hf ggml-org/gpt-oss-120b-GGUF --jinja -st -p "What is 2+2?"
-	break;;
-esac
-popd
 
 # Setup llama-swap
-mkdir -p llama-swap
-pushd llama-swap
-wget https://github.com/mostlygeek/llama-swap/releases/download/v201/llama-swap_201_linux_arm64.tar.gz
-tar zxf llama-swap_201_linux_arm64.tar.gz
-rm llama-swap_201_linux_arm64.tar.gz
-cat >config.yaml <<EOF
+if [ ! -d "llama-swap" ]; then
+    mkdir -p llama-swap
+    pushd llama-swap
+    wget https://github.com/mostlygeek/llama-swap/releases/download/v201/llama-swap_201_linux_arm64.tar.gz
+    tar zxf llama-swap_201_linux_arm64.tar.gz
+    rm llama-swap_201_linux_arm64.tar.gz
+    cat >config.yaml <<EOF
 models:
   medgemma:
     cmd: $LLAMA_SERVER --port \${PORT} -hf unsloth/medgemma-27b-it-GGUF:UD-Q4_K_XL
   gpt-oss:
     cmd: $LLAMA_SERVER --port \${PORT} -hf ggml-org/gpt-oss-120b-GGUF --jinja
 EOF
-cat >/etc/systemd/system/llama-swap.service <<EOF
+    cat >/etc/systemd/system/llama-swap.service <<EOF
 [Unit]
 Description=llama-swap - OpenAI compatible proxy for model swapping
 After=network.target
@@ -127,9 +130,10 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload
-systemctl start llama-swap
-popd
+    systemctl daemon-reload
+    systemctl start llama-swap
+    popd
+fi
 
 # Setup nginx
 cat >/etc/letsencrypt/options-ssl-nginx.conf <<EOF
@@ -148,7 +152,9 @@ ssl_prefer_server_ciphers off;
 
 ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
 EOF
-openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+if [ ! -f "/etc/letsencrypt/ssl-dhparams.pem" ]; then
+    openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+fi
 cat >/etc/nginx/sites-available/default <<EOF
 map \$http_upgrade \$connection_upgrade {
   default upgrade;
@@ -276,6 +282,8 @@ for site in $sites; do
     ln -s /etc/nginx/sites-{available,enabled}/$site
 done
 nginx -s reload
+service nginx restart
+systemctl enable nginx
 
 # Setup coturn
 cat >>/etc/turnserver.conf <<EOF
@@ -291,9 +299,11 @@ EOF
 systemctl restart coturn.service
 
 # Setup secrets
-mkdir -p /root/secrets/authkey
-dd if=/dev/urandom bs=24 count=1 | base64 > /root/secrets/pgsql_pass.txt
-dd if=/dev/urandom bs=24 count=1 | base64 > /root/secrets/chatbot_secret.txt
+if [ ! -d /root/secrets ]; then
+    mkdir -p /root/secrets/authkey
+    dd if=/dev/urandom bs=24 count=1 | base64 > /root/secrets/pgsql_pass.txt
+    dd if=/dev/urandom bs=24 count=1 | base64 > /root/secrets/chatbot_secret.txt
+fi
 
 if [ ! -f /root/secrets/authkey/meta ]; then
     wget https://raw.githubusercontent.com/appinventor-foundation/appinventor-sources/refs/heads/master/appinventor/lib/keyczar/KeyczarTool.jar
@@ -409,7 +419,9 @@ popd
 # Setup dnsmasq
 echo "address=/$DOMAIN/10.42.0.1" >> /etc/dnsmasq.conf
 echo "address=/rendezvous.appinventor.mit.edu/10.42.0.1" >> /etc/dnsmasq.conf
-ln -s /etc/dnsmasq.conf /etc/NetworkManager/dnsmasq-shared.d/
+if [ ! -f /etc/NetworkManager/dnsmasq-shared.d/dnsmasq.conf ]; then
+    ln -s /etc/dnsmasq.conf /etc/NetworkManager/dnsmasq-shared.d/
+fi
 
 # Set up the hotspot. Since this will change the Wifi settings and we may be configuring over Wifi, we save it as the last step.
 nmcli con del Hotspot
