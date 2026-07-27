@@ -2,6 +2,12 @@
 
 This is the supporting repository for Small AI in a Suitcase, an offline first, MIT App Inventor environment to create AI powered mobile apps.
 
+Small AI in a Suitcase – an offline-first platform for rapidly prototyping AI-powered mobile apps in low-resource, low-connectivity environments – was named a winner of the World Bank Group Innovation Award in 2026, recognizing early-stage innovations that accelerate the Bank's jobs and development priorities.
+
+This project is a collaboration between the World Bank Group (Digital & AI, IFC/Knowledge Bank, People and Planet) and the App Inventor Foundation. The award reflects the World Bank Group's focus on bringing accessible, offline-first AI tools to frontline service delivery in low-resource settings.
+
+Please open an issue in this repo or reach out to us if you have further questions.
+
 Information about the suitcase and setup can be found in the [index file](./index.md).
 
 The [./setup.sh](setup) script contains all the instructions to fully install the suitcase.
